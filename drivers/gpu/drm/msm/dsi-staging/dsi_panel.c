@@ -3977,6 +3977,7 @@ exit_unlock:
 	return retval;
 }
 
+
 ssize_t mipi_reg_read(char *buf)
 {
 	struct dsi_panel *panel = g_panel;
@@ -4005,30 +4006,109 @@ ssize_t mipi_reg_read(char *buf)
 	return count;
 }
 
-static ssize_t mipi_reg_procfs_write(struct file *file, const char __user *buf,
+static ssize_t mipi_reg_procfs_write (struct file *file, const char __user *buf,
 	size_t count, loff_t *offp)
 {
-	int retval = 0;
-	char *input = NULL;
+	struct dsi_panel_cmd_set cmd_sets = {0, 0, 0, 0, NULL};
+	struct seq_file *seq = (struct seq_file *)file->private_data;
+	struct dsi_panel *panel = (struct dsi_panel *)seq->private;
+	int retval = 0, dlen = 0;
+	u32 packet_count = 0;
+	u8 *tmp = NULL, *p_tmp = NULL, *data = NULL;
+	u8 pbuf[2];
 
-	input = kmalloc(count, GFP_KERNEL);
-	if (!input) {
+	mutex_lock(&panel->panel_lock);
+
+	if (!panel || !panel->panel_initialized) {
+		pr_err("[LCD] panel not ready!\n");
+		mutex_unlock(&panel->panel_lock);
+		return -EAGAIN;
+	}
+
+	tmp = kzalloc(count, GFP_KERNEL);
+	if (!tmp) {
+		mutex_unlock(&panel->panel_lock);
 		return -ENOMEM;
 	}
-	if (copy_from_user(input, buf, count)) {
-		pr_err("copy from user failed\n");
+	if (copy_from_user(tmp, buf, count)) {
 		retval = -EFAULT;
-		goto end;
+		goto exit_free1;
 	}
-	input[count-1] = '\0';
-	pr_debug("copy_from_user input: %s\n", input);
+	tmp[count-1] = '\0';
 
-	retval = mipi_reg_write(input, count);
-end:
-	kfree(input);
+	pr_debug("%s: copy_from_user buf: %s\n", __func__, tmp);
+
+	p_tmp = tmp;
+	memcpy(pbuf, p_tmp, 2);
+	read_reg.enabled = simple_strtol(pbuf, NULL, 10);
+	p_tmp = p_tmp + 3;
+	memcpy(pbuf, p_tmp, 2);
+	read_reg.cmds_rlen = simple_strtol(pbuf, NULL, 10);
+	p_tmp = p_tmp + 3;
+
+	data = kzalloc(count - 6, GFP_KERNEL);
+	if (!data) {
+		retval = -ENOMEM;
+		goto exit_free1;
+	}
+	data[count-6-1] = '\0';
+	dlen = string_merge_into_buf(p_tmp, count - 6, data);
+	if (dlen <= 0)
+		goto exit_free2;
+	retval = dsi_panel_get_cmd_pkt_count(data, dlen, &packet_count);
+	if (!packet_count) {
+		pr_err("%s: get pkt count failed!\n", __func__);
+		goto exit_free2;
+	}
+	if (cmd_sets.cmds) {
+		kfree(cmd_sets.cmds);
+		cmd_sets.cmds = NULL;
+	}
+
+
+	retval = dsi_panel_alloc_cmd_packets(&cmd_sets, packet_count);
+	if (retval) {
+		pr_err("%s: failed to allocate cmd packets, ret=%d\n", __func__, retval);
+		goto exit_free2;
+	}
+
+	retval = dsi_panel_create_cmd_packets(data, dlen, packet_count,
+						  cmd_sets.cmds);
+	if (retval) {
+		pr_err("%s: failed to create cmd packets, ret=%d\n", __func__, retval);
+		goto exit_free3;
+	}
+
+	if (read_reg.enabled) {
+		read_reg.read_cmd = cmd_sets;
+		retval = dsi_display_read_panel(panel, &read_reg);
+		if (retval <= 0) {
+			pr_err("%s: [%s]failed to read cmds, rc=%d\n", __func__, panel->name, retval);
+			goto exit_free4;
+		}
+	} else {
+		read_reg.read_cmd = cmd_sets;
+		retval = dsi_display_write_panel(panel, &cmd_sets);
+		if (retval) {
+			pr_err("%s: [%s] failed to send cmds, rc=%d\n", __func__, panel->name, retval);
+			goto exit_free4;
+		}
+	}
+
+	pr_info("[%s]: mipi_procfs_write done!\n", panel->name);
+	retval = count;
+
+exit_free4:
+	dsi_panel_destroy_cmd_packets(&cmd_sets);
+exit_free3:
+	dsi_panel_dealloc_cmd_packets(&cmd_sets);
+exit_free2:
+	kfree(data);
+exit_free1:
+	kfree(tmp);
+	mutex_unlock(&panel->panel_lock);
 	return retval;
 }
-
 static int mipi_reg_procfs_show(struct seq_file *m, void *v)
 {
 	struct dsi_panel *panel = (struct dsi_panel *)m->private;
