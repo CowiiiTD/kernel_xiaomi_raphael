@@ -821,6 +821,13 @@ int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 	} else
 		bl_temp = bl_lvl;
 
+	pr_debug("backlight type:%d lvl:%d\n", bl->type, bl_temp);
+	if (panel->dc_enable && bl_temp < panel->dc_threshold && bl_temp != 0) {
+		pr_info("skip set backlight because dc enable %d, bl %d, last_bl %d\n", panel->dc_enable, bl_temp, panel->last_bl_lvl);
+		mutex_unlock(&panel->panel_lock);
+		return rc;
+	}
+
 	switch (bl->type) {
 	case DSI_BACKLIGHT_WLED:
 		rc = backlight_device_set_brightness(bl->raw_bd, bl_temp);
@@ -3702,6 +3709,15 @@ static int dsi_panel_parse_mi_config(struct dsi_panel *panel,
 		pr_info("fod dimlayer enabled.\n");
 	} else {
 		pr_info("fod dimlayer disabled.\n");
+	}
+
+	rc = of_property_read_u32(of_node,
+			"qcom,mdss-dsi-panel-dc-threshold", &panel->dc_threshold);
+	if (rc) {
+		panel->dc_threshold = 320;
+		pr_info("default dc backlight threshold is %d\n", panel->dc_threshold);
+	} else {
+		pr_info("dc backlight threshold %d \n", panel->dc_threshold);
 	}
 
 	dsi_panel_parse_elvss_dimming_config(panel);
