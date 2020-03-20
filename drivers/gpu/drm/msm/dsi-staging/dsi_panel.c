@@ -749,9 +749,9 @@ int dsi_panel_set_doze_backlight(struct dsi_display *display, u32 bl_lvl)
 	panel = display->panel;
 	drm_dev = display->drm_dev;
 
-	if (panel->fod_hbm_enabled || panel->fod_backlight_flag) {
-		pr_info("%s FOD HBM open, skip value:%u [hbm=%d][fod_bl=%d]\n", __func__,
-			bl_lvl, panel->fod_hbm_enabled, panel->fod_backlight_flag);
+	if (panel->fod_hbm_enabled || panel->fod_dimlayer_hbm_enabled || panel->fod_backlight_flag) {
+		pr_info("%s FOD HBM open, skip value:%u [hbm=%d][dimlayer_fod=%d][fod_bl=%d]\n", __func__,
+			bl_lvl, panel->fod_hbm_enabled, panel->fod_dimlayer_hbm_enabled, panel->fod_backlight_flag);
 		return rc;
 	}
 
@@ -3717,6 +3717,15 @@ static int dsi_panel_parse_mi_config(struct dsi_panel *panel,
 	panel->backlight_pulse_flag = false;
 	panel->fod_hbm_off_time = ktime_get();
 	panel->fod_backlight_off_time = ktime_get();
+
+	panel->panel_active_count_enable = false;
+	panel->panel_active = 0;
+	panel->kickoff_count = 0;
+	panel->bl_duration = 0;
+	panel->bl_level_integral = 0;
+	panel->bl_highlevel_duration = 0;
+	panel->bl_lowlevel_duration = 0;
+	panel->hbm_duration = 0;
 	panel->hbm_times = 0;
 	panel->dc_enable = false;
 
@@ -4801,6 +4810,8 @@ int dsi_panel_set_nolp(struct dsi_panel *panel)
 		pr_info("%s skip\n", __func__);
 
 	panel->in_aod = false;
+	if (panel->bl_config.dcs_type_ss)
+		rc = dsi_panel_set_backlight(panel, panel->last_bl_lvl);
 exit:
 	mutex_unlock(&panel->panel_lock);
 	return rc;
