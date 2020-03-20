@@ -238,7 +238,6 @@ struct dsi_panel {
 	u32 last_bl_lvl;
 	s32 backlight_delta;
 	u32 backlight_pulse_threshold;
-	u32 dc_threshold;
 	bool dc_enable;
 	bool backlight_pulse_flag; /* true = 4 pulse and false = 1 pulse */
 

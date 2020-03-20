@@ -25,7 +25,7 @@
 #include "sde_rm.h"
 #include "dsi_panel.h"
 #include "sde_trace.h"
-#include <drm/drm_notifier.h>
+#include <linux/msm_drm_notify.h>
 
 #define BL_NODE_NAME_SIZE 32
 
@@ -705,7 +705,7 @@ int sde_connector_update_hbm(struct sde_connector *c_conn)
 			mutex_lock(&dsi_display->panel->panel_lock);
 			sde_encoder_wait_for_event(c_conn->encoder, MSM_ENC_VBLANK);
 			if (dsi_display->drm_dev
-				&& ((dsi_display->drm_dev->doze_state == DRM_BLANK_LP1)	|| (dsi_display->drm_dev->doze_state == DRM_BLANK_LP2))) {
+				&& ((dsi_display->drm_dev->doze_state == MSM_DRM_BLANK_LP1)	|| (dsi_display->drm_dev->doze_state == MSM_DRM_BLANK_LP2))) {
 				if (dsi_display->panel->last_bl_lvl > dsi_display->panel->doze_backlight_threshold) {
 					pr_info("hbm fod off doze hbm on\n");
 					dsi_display_write_panel(dsi_display, &dsi_display->panel->cur_mode->priv_info->cmd_sets[DSI_CMD_SET_DOZE_HBM]);
@@ -2020,6 +2020,7 @@ static int sde_connector_atomic_check(struct drm_connector *connector,
 static irqreturn_t esd_err_irq_handle(int irq, void *data)
 {
 	struct sde_connector *c_conn = data;
+	struct dsi_display *dsi_display = (struct dsi_display *)(c_conn->display);
 	struct drm_event event;
 	bool panel_on = false;
 
@@ -2037,13 +2038,14 @@ static irqreturn_t esd_err_irq_handle(int irq, void *data)
 
 	if (panel_on && (c_conn->panel_dead == false)) {
 		SDE_DEFERRED_ERROR("esd check irq report PANEL_DEAD conn_id: %d enc_id: %d, panel_status[%d]\n",
-			c_conn->base.base.id, c_conn->encoder->base.id, panel_on);
+		c_conn->base.base.id, c_conn->encoder->base.id, panel_on);
+		dsi_display->panel->panel_dead_flag = true;
 		c_conn->panel_dead = true;
 		event.type = DRM_EVENT_PANEL_DEAD;
 		event.length = sizeof(bool);
 		msm_mode_object_event_notify(&c_conn->base.base,
 			c_conn->base.dev, &event, (u8 *)&c_conn->panel_dead);
-		sde_encoder_display_failure_notification(c_conn->encoder,false);
+		sde_encoder_display_failure_notification(c_conn->encoder, false);
 	}
 	return IRQ_HANDLED;
 }
