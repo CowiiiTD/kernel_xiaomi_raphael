@@ -37,12 +37,6 @@
 
 #define DSI_MODE_MAX 5
 
-#define BUF_LEN_MAX    256
-
-#define DEMURA_LEVEL_02 256
-#define DEMURA_LEVEL_08 11
-#define DEMURA_LEVEL_0D 1
-
 enum dsi_panel_rotation {
 	DSI_PANEL_ROTATE_NONE = 0,
 	DSI_PANEL_ROTATE_HV_FLIP,
@@ -123,12 +117,11 @@ struct dsi_backlight_config {
 	u32 bl_scale_ad;
 	bool dcs_type_ss_ea;
 	bool dcs_type_ss_eb;
-	bool xiaomi_f4_36_flag;
-	bool xiaomi_f4_41_flag;
 
 	int en_gpio;
 	bool bl_remap_flag;
 	bool samsung_prepare_hbm_flag;
+	bool local_hbm_flag;
 	/* PWM params */
 	struct pwm_device *pwm_bl;
 	bool pwm_enabled;
@@ -243,25 +236,12 @@ struct dsi_panel {
 	struct delayed_work cmds_work;
 	u32 last_bl_lvl;
 	s32 backlight_delta;
-	u32 backlight_demura_level; /* For the f4_41 panel */
-	u32 backlight_pulse_threshold;
-	/* DC bkl */
-	u32 dc_demura_threshold;
-	bool dc_enable;
-	bool backlight_pulse_flag; /* true = 4 pulse and false = 1 pulse */
 
-	bool hbm_enabled;
 	bool fod_hbm_enabled;
-	bool fod_dimlayer_enabled;
-	bool fod_dimlayer_hbm_enabled;
-	bool fod_ui_ready;
 	u32 doze_backlight_threshold;
 	u32 fod_off_dimming_delay;
 	ktime_t fod_backlight_off_time;
 	ktime_t fod_hbm_off_time;
-	bool f4_51_ctrl_flag; /* For the f4_36 panel */
-	u32 hbm_off_51_index;
-	u32 fod_off_51_index;
 
 	bool elvss_dimming_check_enable;
 	struct dsi_read_config elvss_dimming_cmds;
@@ -269,17 +249,11 @@ struct dsi_panel {
 	struct dsi_panel_cmd_set hbm_fod_on;
 	struct dsi_panel_cmd_set hbm_fod_off;
 
-	u8 panel_read_data[BUF_LEN_MAX];
-	struct dsi_read_config xy_coordinate_cmds;
-
 	bool fod_backlight_flag;
 	bool fod_flag;
 	u32 fod_target_backlight;
 	bool fod_skip_flag; /* optimize to skip nolp command */
 	bool in_aod; /* set  DISPPARAM_DOZE_BRIGHTNESS_HBM/LBM only in AOD */
-	bool is_tddi_flag;
-	bool panel_dead_flag;
-	bool panel_max_frame_rate;
 };
 
 static inline bool dsi_panel_ulps_feature_enabled(struct dsi_panel *panel)

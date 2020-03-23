@@ -59,13 +59,6 @@ static const struct of_device_id dsi_display_dt_match[] = {
 	{}
 };
 
-struct dsi_display *primary_display;
-struct dsi_display *get_primary_display(void)
-{
-	return primary_display;
-}
-EXPORT_SYMBOL(get_primary_display);
-
 static void dsi_display_mask_ctrl_error_interrupts(struct dsi_display *display,
 			u32 mask, bool enable)
 {
@@ -1247,13 +1240,13 @@ int dsi_display_set_power(struct drm_connector *connector,
 		return -EINVAL;
 	}
 
-        if (!connector || !connector->dev) {
-                pr_err("invalid connector/dev\n");
-                return -EINVAL;
-        } else {
-                dev = connector->dev;
-                event = dev->doze_state;
-        }
+	if (!connector || !connector->dev) {
+		pr_err("invalid connector/dev\n");
+		return -EINVAL;
+	} else {
+		dev = connector->dev;
+		event = dev->doze_state;
+	}
 
 	g_notify_data.data = &event;
 
@@ -1270,16 +1263,23 @@ int dsi_display_set_power(struct drm_connector *connector,
 		break;
 	case SDE_MODE_DPMS_ON:
 		if (display->panel->power_mode == SDE_MODE_DPMS_LP1 ||
-			display->panel->power_mode == SDE_MODE_DPMS_LP2) {
-			drm_notifier_call_chain(DRM_EARLY_EVENT_BLANK, &g_notify_data);
+			display->panel->power_mode == SDE_MODE_DPMS_LP2)
 			rc = dsi_panel_set_nolp(display->panel);
-			drm_notifier_call_chain(DRM_EVENT_BLANK, &g_notify_data);
-		}
+		break;
+	default:
+		if (dev->pre_state != SDE_MODE_DPMS_LP1 && dev->pre_state != SDE_MODE_DPMS_LP2)
+			break;
+
+		drm_notifier_call_chain(DRM_EARLY_EVENT_BLANK, &g_notify_data);
+		rc = dsi_panel_set_nolp(display->panel);
+		drm_notifier_call_chain(DRM_EVENT_BLANK, &g_notify_data);
 		break;
 	case SDE_MODE_DPMS_OFF:
 	default:
 		return rc;
 	}
+
+	dev->pre_state = power_mode;
 
 	pr_debug("Power mode transition from %d to %d %s",
 		 display->panel->power_mode, power_mode,
@@ -5565,7 +5565,6 @@ int dsi_display_dev_probe(struct platform_device *pdev)
 	display->pdev = pdev;
 	display->boot_disp = boot_disp;
 	display->dsi_type = dsi_type;
-	display->is_prim_display = true;
 
 	dsi_display_parse_cmdline_topology(display, index);
 
@@ -6434,7 +6433,6 @@ int dsi_display_get_modes(struct dsi_display *display,
 exit:
 	*out_modes = display->modes;
 	rc = 0;
-	primary_display = display;
 
 error:
 	if (rc)
@@ -7514,7 +7512,6 @@ int dsi_display_enable(struct dsi_display *display)
 	}
 	SDE_EVT32(SDE_EVTLOG_FUNC_ENTRY);
 	panel = display->panel;
-
 	/* Engine states and panel states are populated during splash
 	 * resource init and hence we return early
 	 */
